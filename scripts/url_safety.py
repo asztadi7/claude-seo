@@ -578,6 +578,20 @@ def _assert_proxy_host_is_public(host: str) -> str:
         "Point the proxy environment variable at a publicly routable "
         "address, or unset it."
     )
+    # Fork change (asztadi7, 2026-11-17): sandboxed cloud runners (Claude Code
+    # on the web) route ALL egress through a local proxy on 127.0.0.1, so the
+    # public-only rule makes every fetch fail there. An operator may name the
+    # exact proxy hosts to trust in CLAUDE_SEO_TRUSTED_PROXY (comma-separated,
+    # hostnames or IP literals, no ranges or wildcards). Metadata endpoints can
+    # never be trusted this way. Audit targets are unaffected: this only
+    # exempts the configured proxy host itself.
+    trusted = {
+        normalize_hostname(part.strip())
+        for part in os.environ.get("CLAUDE_SEO_TRUSTED_PROXY", "").split(",")
+        if part.strip()
+    }
+    if normalized in trusted and normalized not in _NEVER_ALLOWLISTABLE_HOSTNAMES:
+        return normalized
     if normalized in _BLOCKED_HOSTNAMES:
         raise URLSafetyError(
             f"Refusing configured HTTP proxy {host!r}: blocked hostname "
